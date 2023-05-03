@@ -8,12 +8,30 @@ theme_update(
    aspect.ratio = 1
 )
 
-data_folder = '2023-03-30/'
+results_generalists = 
+   'https://github.com/rafaeldandrea/Pitcher-plant-model/blob/main/data/results_generalists.rds?raw=true' |>
+   url() |>
+   readRDS()
 
-dir_path = 
-   paste0('g:/My Drive/Stony Brook University/Conferences/NSF Montreal Workshop/Function group/Data/', data_folder)
+results_specialists =
+   'https://github.com/rafaeldandrea/Pitcher-plant-model/blob/main/data/results_specialists.rds?raw=true' |>
+   url() |>
+   readRDS()
 
-results = readRDS(paste0(dir_path, 'results.rds'))
+results_gradient =
+   'https://github.com/rafaeldandrea/Pitcher-plant-model/blob/main/data/results_gradient.rds?raw=true' |>
+   url() |>
+   readRDS()
+
+results =
+   results_generalists |>
+   bind_rows(results_specialists) |>
+   bind_rows(results_gradient)
+
+missing_species = 
+   'https://github.com/rafaeldandrea/Pitcher-plant-model/blob/main/data/missing_species.rds?raw=true' |>
+   url() |>
+   readRDS()
 
 ## Total function across consumer species
 total_function =
@@ -33,6 +51,7 @@ total_function_summary =
       .groups = 'drop'
    )
 
+## Fig2 -------------------------------------------------------------------
 ## Plot BEF for scenarios with increasing resource quality, flat resource recalcitrance, and nested by-production
 ## include data points for all replicates
 fig2_main = 
@@ -58,6 +77,9 @@ fig2_main =
    ggh4x::facet_grid2(density_dependence ~ generalism, scales = 'free_y', independent = 'y') +
    labs(x = 'Species richness', y = 'Total ammonia production')
 
+
+
+## Fig3 -------------------------------------------------------------------
 ## Plot BEF for scenarios with flat resource recalcitrance
 ## include data points for all replicates
 ## Note: change handling_time == 'flat' to 'increase' or 'decrease' for the other scnearios
@@ -93,6 +115,8 @@ fig3_main =
       linetype = 'Resource\nquality'
    )
 
+
+## Fig4? -------------------------------------------------------------------
 ## Calculate complementarity and selection effects
 ## Reference: Loreau & Hector 2001 (Nature)
 Loreau = 
@@ -186,6 +210,26 @@ fig4_main =
       shape = 'Density dependence'
    )
 
+fig4_SI = 
+   comp_sel |>
+   filter(
+      handling_time == 'flat'
+   ) |>
+   ggplot(aes(compl.m, selec.m, color = generalism, shape = density_dependence)) +
+   geom_vline(xintercept = 0, color = 'grey') +
+   geom_hline(yintercept = 0, color = 'grey') +
+   geom_point() +
+   facet_grid(efficiency ~ production) +
+   labs(
+      x = 'Complementarity', 
+      y = 'Selection', 
+      color = 'Uptake scenario', 
+      shape = 'Density dependence'
+   )
+
+
+
+## Fig4? -------------------------------------------------------------------
 ## Complementarity and Selection by richness
 fig4_alternate = 
    comp_sel1|>
@@ -265,19 +309,162 @@ fig4_alternate2 =
       y = 'Value'
    )
 
-fig4_SI = 
-   comp_sel |>
+
+
+## Fig SI -------------------------------------------------------------------
+## 2023-04-27 Investigate the bifurcation in the Specialists scenario
+branch = 
+   total_function |>
    filter(
-      handling_time == 'flat'
-   ) |>
-   ggplot(aes(compl.m, selec.m, color = generalism, shape = density_dependence)) +
-   geom_vline(xintercept = 0, color = 'grey') +
-   geom_hline(yintercept = 0, color = 'grey') +
-   geom_point() +
-   facet_grid(efficiency ~ production) +
-   labs(
-      x = 'Complementarity', 
-      y = 'Selection', 
-      color = 'Uptake scenario', 
-      shape = 'Density dependence'
+      production == 'parallel',
+      handling_time == 'flat',
+      efficiency == 'increase',
+      generalism == 'specialists', 
+      density_dependence == 'inter',
+      n > 40,
+      n < 50
    )
+
+if(!exists('missing_species')){
+   missing_species = NULL
+   for(i in 1:nrow(branch)){
+      scen = branch$scenario[i]
+      seed = branch$seed[i]
+      foo =
+         paste0(
+            'g:/My Drive/Stony Brook University/Conferences/NSF Montreal Workshop/Function group/Data/2023-04-26/scenario-', 
+            scen, 
+            '_seed-', 
+            seed, 
+            '.rds'
+         ) |>
+         readRDS()
+      
+      missing_species =
+         missing_species |>
+         bind_rows(
+            tibble(
+               scenario = scen,
+               seed = seed,
+               missing =
+                  foo |>
+                  filter(grepl('N', species)) |>
+                  pull(species) |>
+                  unique() |>
+                  setdiff(x = paste0('N', 1:50))
+            ) |>
+               mutate(
+                  missing = 
+                     str_split(missing, 'N', simplify = TRUE)[, 2] |> 
+                     as.numeric()
+               )
+         )
+   }
+} 
+
+branch =
+   branch |>
+   inner_join(missing_species) |>
+   mutate(richness = factor(n))
+
+plot_missing =
+   branch |> 
+   group_by(scenario, seed) |> 
+   summarize(
+      missing50 = 50 %in% missing,
+      missing49 = 49 %in% missing,
+      .groups = 'drop'
+   ) |>
+   inner_join(branch) |>
+   ggplot(aes(missing, func, color = missing50, shape = missing49)) +
+   geom_point() +
+   labs(x = 'Missing species', y = 'Function') +
+   facet_wrap(~n, labeller = label_both)
+
+
+## Fig5 -------------------------------------------------------------------
+## Calculate importance of each dimension of variation
+
+BEF_sign = 
+   total_function_summary |>
+   filter(n > 1, n < 50) |>
+   group_by(across(sampling:efficiency)) |>
+   summarize(
+      sign = 
+         ifelse(
+            sd(func) / mean(func) < .01,
+            '0',
+            ifelse(
+               n[func == max(func)] == 49, 
+               '+',
+               ifelse(
+                  n[func == max(func)] == 3,
+                  '-',
+                  '+-'
+               )
+            )
+         ),
+      .groups = 'drop'
+   )
+
+importance = 
+   BEF_sign |>
+   select(-c(uptake_factor, recalcitrance)) |>
+   mutate_if(is.character, as.factor) |>
+   pivot_longer(density_dependence:efficiency, names_to = 'dimension') |>
+   group_by(dimension, value) |>
+   summarize(
+      pos = sum(sign == '+'),
+      neg = sum(sign == '-'),
+      mod = sum(sign == '+-'),
+      nil = sum(sign == '0'),
+      .groups = 'drop'
+   ) |>
+   pivot_longer(
+      pos:nil,
+      names_to = 'sign',
+      values_to = 'count'
+   ) |>
+   group_by(dimension, sign) |>
+   summarize(
+      cv = sd(count) / mean(count),
+      .groups = 'drop'
+   ) |>
+   group_by(dimension) |>
+   summarize(
+      mean_cv = mean(cv), 
+      .groups = 'drop'
+   ) |>
+   mutate(importance = mean_cv / max(mean_cv)) |>
+   mutate(
+      dimension = 
+         fct_recode(
+            dimension,
+            !!!c(
+               `Niche scenario` = 'generalism',
+               `Coregulation scenario` = 'density_dependence',
+               `Resource quality` = 'efficiency',
+               `Resource recalcitrance` = 'handling_time',
+               `By-production architecture` = 'production'
+            )
+         )
+   ) |>
+   arrange(desc(importance)) |>
+   mutate(dimension = factor(dimension, dimension))
+
+fig5 =
+   importance |>
+   ggplot(
+      aes(
+         dimension,
+         importance,
+         fill = dimension
+      )
+   ) +
+   geom_col(color = 'black') +
+   theme(
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank()
+   ) +
+   ylab('Relative importance')
