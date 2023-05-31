@@ -40,6 +40,40 @@ total_function =
    summarize(
       func = sum(value),
       .groups = 'drop'
+   ) |>
+   mutate(
+      generalism = 
+         fct_recode(
+            generalism,
+            !!!c(
+               Generalists = 'random',
+               Specialists = 'specialists',
+               Gradient = 'tradeoff'
+            )
+         ),
+      density_dependence =
+         fct_recode(
+            density_dependence,
+            !!!c(
+               Absent = 'none',
+               Intraspecific = 'intra',
+               Interspecific = 'inter',
+               Neutral = 'neutral'
+            )
+         )
+   ) |>
+   mutate(
+      density_dependence = 
+         factor(
+            density_dependence, 
+            levels = 
+               c(
+                  'Absent', 
+                  'Neutral', 
+                  'Intraspecific', 
+                  'Interspecific'
+               )
+            )
    )
 
 ## Average total function across scenario replicates
@@ -54,7 +88,7 @@ total_function_summary =
 ## Fig2 -------------------------------------------------------------------
 ## Plot BEF for scenarios with increasing resource quality, flat resource recalcitrance, and nested by-production
 ## include data points for all replicates
-fig2_main = 
+fig2 = 
    total_function |>
    filter(
       efficiency == 'increase',
@@ -64,7 +98,7 @@ fig2_main =
    ggplot(aes(n, func)) +
    geom_point(color = 'grey90') +
    geom_line(
-      aes(n, func, color = density_dependence), 
+      aes(n, func), 
       data = 
          total_function_summary |>
          filter(
@@ -82,38 +116,43 @@ fig2_main =
 ## Fig3 -------------------------------------------------------------------
 ## Plot BEF for scenarios with flat resource recalcitrance
 ## include data points for all replicates
-## Note: change handling_time == 'flat' to 'increase' or 'decrease' for the other scnearios
-fig3_main = 
-   total_function_summary |>
-   filter(handling_time == 'flat') |>
-   mutate(
-      efficiency = 
-         fct_recode(
-            efficiency,
-            !!!c(
-               Neutral = 'flat',
-               Gradient = 'increase'
+## Note: Fig3: .ht = 'flat';  FigS2: .ht = 'increase';  FigS3: .ht = 'decrease'
+for(.ht in c('flat', 'decrease', 'increase')){
+   plot = 
+      total_function_summary |>
+      filter(handling_time == .ht) |>
+      mutate(
+         efficiency = 
+            fct_recode(
+               efficiency,
+               !!!c(
+                  Neutral = 'flat',
+                  Gradient = 'increase'
+               )
+            ),
+         production =
+            fct_recode(
+               production,
+               !!!c(
+                  None = 'off',
+                  Nested = 'parallel',
+                  Serial = 'serial'
+               )
             )
-         ),
-      production =
-         fct_recode(
-            production,
-            !!!c(
-               None = 'off',
-               Nested = 'parallel',
-               Serial = 'serial'
-            )
-         )
-   ) |>
-   ggplot(aes(n, func, linetype = efficiency, color = production)) +
-   geom_line() +
-   ggh4x::facet_grid2(density_dependence ~ generalism, scales = 'free_y', independent = 'y') +
-   labs(
-      x = 'Species richness', 
-      y = 'Total ammonia production',
-      color = 'By-production\narchitecture',
-      linetype = 'Resource\nquality'
-   )
+      ) |>
+      ggplot(aes(n, func, linetype = efficiency, color = production)) +
+      geom_line() +
+      ggh4x::facet_grid2(density_dependence ~ generalism, scales = 'free_y', independent = 'y') +
+      labs(
+         x = 'Species richness', 
+         y = 'Total ammonia production',
+         color = 'By-production\narchitecture',
+         linetype = 'Resource\nquality'
+      )
+   
+   assign(paste0('fig3_', .ht), plot)
+}
+
 
 
 ## Fig4? -------------------------------------------------------------------
@@ -154,7 +193,7 @@ Hector =
    )
 
 ## calculate the mean of the above across scenario replicates
-comp_sel1 = 
+comp_sel = 
    Hector |>
    filter(n > 1) |>
    group_by(across(n:efficiency)) |>
@@ -164,81 +203,6 @@ comp_sel1 =
       selec.m = mean(selec),
       selec.s = sd(selec),
       .groups = 'drop'
-   )
-
-comp_sel = 
-   Hector |>
-   filter(n > 1) |>
-   group_by(across(sampling:efficiency)) |>
-   summarize(
-      compl.m = mean(compl),
-      compl.s = sd(compl),
-      selec.m = mean(selec),
-      selec.s = sd(selec),
-      .groups = 'drop'
-   )
-
-## Compare scenarios based on complementarity and selection effects 
-fig4_main = 
-   comp_sel |>
-   filter(
-      handling_time == 'flat',
-      efficiency == 'increase',
-      production == 'parallel'
-   ) |>
-   ggplot(aes(compl.m, selec.m, color = generalism, shape = density_dependence)) +
-   geom_vline(xintercept = 0, color = 'grey') +
-   geom_hline(yintercept = 0, color = 'grey') +
-   geom_errorbar(
-      aes(
-         x = compl.m,
-         ymin = selec.m - selec.s,
-         ymax = selec.m + selec.s
-      )
-   ) +
-   geom_errorbarh(
-      aes(
-         xmin = compl.m - compl.s,
-         xmax = compl.m + compl.s
-      )
-   ) +
-   geom_point() +
-   labs(
-      x = 'Complementarity', 
-      y = 'Selection', 
-      color = 'Uptake scenario', 
-      shape = 'Density dependence'
-   )
-
-fig4_SI = 
-   comp_sel |>
-   filter(
-      handling_time == 'flat'
-   ) |>
-   ggplot(aes(compl.m, selec.m, color = generalism, shape = density_dependence)) +
-   geom_vline(xintercept = 0, color = 'grey') +
-   geom_hline(yintercept = 0, color = 'grey') +
-   geom_point() +
-   facet_grid(efficiency ~ production) +
-   labs(
-      x = 'Complementarity', 
-      y = 'Selection', 
-      color = 'Uptake scenario', 
-      shape = 'Density dependence'
-   )
-
-
-
-## Fig4? -------------------------------------------------------------------
-## Complementarity and Selection by richness
-fig4_alternate = 
-   comp_sel1|>
-   rename(Complementarity = compl.m, Selection = selec.m) |>
-   pivot_longer(c(Complementarity, Selection), names_to = 'effect') |>
-   filter(
-      handling_time == 'flat',
-      efficiency == 'increase',
-      production == 'parallel'
    ) |>
    mutate(
       generalism = 
@@ -256,47 +220,138 @@ fig4_alternate =
             !!!c(
                Absent = 'none',
                Intraspecific = 'intra',
-               Interspecific = 'inter'
+               Interspecific = 'inter',
+               Neutral = 'neutral'
             )
          )
    ) |>
+   mutate(
+      density_dependence = 
+         factor(
+            density_dependence, 
+            levels = 
+               c(
+                  'Absent', 
+                  'Neutral', 
+                  'Intraspecific', 
+                  'Interspecific'
+               )
+         )
+   )
+
+comp_sel_avg = 
+   comp_sel |>
+   group_by(across(sampling:efficiency)) |>
+   summarize(
+      compl.m = mean(compl.m),
+      compl.s = sd(compl.m),
+      selec.m = mean(selec.m),
+      selec.s = sd(selec.m),
+      .groups = 'drop'
+   )
+
+## Compare scenarios based on complementarity and selection effects 
+fig5 = 
+   comp_sel_avg |>
+   filter(
+      handling_time == 'flat',
+      efficiency == 'increase',
+      production == 'parallel'
+   ) |>
+   rename(Complementarity = compl.m, Selection = selec.m) |>
+   filter(
+      handling_time == 'flat',
+      efficiency == 'increase',
+      production == 'parallel'
+   ) |>
+   ggplot(
+      aes(
+         Complementarity, 
+         Selection, 
+         fill = generalism,
+         shape = density_dependence
+      )
+   ) +
+   geom_vline(xintercept = 0, color = 'grey') +
+   geom_hline(yintercept = 0, color = 'grey') +
+   geom_point(size = 4, color = 'black') +
+   labs(
+      x = 'Complementarity', 
+      y = 'Selection', 
+      fill = 'Niche\nscenario', 
+      shape = 'Co-regulation\nscenario'
+   ) +
+   scale_shape_manual(values=c(22, 21, 24, 25)) +
+   guides(fill = guide_legend(override.aes = list(color = c('#F8766D','#00BA38','#619CFF'))))
+
+figS4 = 
+   comp_sel_avg |>
+   filter(
+      handling_time == 'increase'
+   ) |>
+   mutate(
+      efficiency = 
+         fct_recode(
+            efficiency,
+            !!!c(
+               Neutral = 'flat',
+               Gradient = 'increase'
+            )
+         ),
+      production =
+         fct_recode(
+            production,
+            !!!c(
+               None = 'off',
+               Nested = 'parallel',
+               Serial = 'serial'
+            )
+         )
+   ) |>
+   ggplot(aes(compl.m, selec.m, fill = generalism, shape = density_dependence)) +
+   geom_vline(xintercept = 0, color = 'grey') +
+   geom_hline(yintercept = 0, color = 'grey') +
+   geom_point() +
+   ggh4x::facet_grid2(efficiency ~ production, scales = 'free_y', independent = 'y') +
+   labs(
+      x = 'Complementarity', 
+      y = 'Selection', 
+      fill = 'Niche\nscenario', 
+      shape = 'Co-regulation\nscenario'
+   ) +
+   scale_shape_manual(values=c(22, 21, 24, 25)) +
+   guides(fill = guide_legend(override.aes = list(color = c('#F8766D','#00BA38','#619CFF'))))
+
+
+
+## Fig4? -------------------------------------------------------------------
+## Complementarity and Selection by richness
+fig4_alternate = #not used
+   comp_sel |>
+   filter(
+      efficiency == 'increase', 
+      handling_time == 'flat',
+      production == 'parallel'
+   ) |>
+   rename(Complementarity = compl.m, Selection = selec.m) |>
+   pivot_longer(c(Complementarity, Selection), names_to = 'effect') |>
    ggplot(aes(n, value, color = generalism, linetype = density_dependence)) +
    geom_line() +
    facet_grid(~effect) +
    labs(
       x = 'Species richness',
       y = 'Value',
-      color = 'Niche\nscenario',
+      fill = 'Niche\nscenario',
       linetype = 'Co-regulation\nscenario'
    )
 
 ## Complementarity and Selection by richness
-fig4_alternate2 = 
-   comp_sel1|>
+figS5 = 
+   comp_sel|>
    filter(
       handling_time == 'flat',
       efficiency == 'increase',
       production == 'parallel'
-   ) |>
-   mutate(
-      generalism = 
-         fct_recode(
-            generalism,
-            !!!c(
-               Generalists = 'random',
-               Specialists = 'specialists',
-               Gradient = 'tradeoff'
-            )
-         ),
-      density_dependence =
-         fct_recode(
-            density_dependence,
-            !!!c(
-               Absent = 'none',
-               Intraspecific = 'intra',
-               Interspecific = 'inter'
-            )
-         )
    ) |>
    ggplot() +
    # geom_errorbar(aes(x = n, ymin = selec.m - selec.s, ymax = selec.m + selec.s)) +
@@ -319,8 +374,8 @@ branch =
       production == 'parallel',
       handling_time == 'flat',
       efficiency == 'increase',
-      generalism == 'specialists', 
-      density_dependence == 'inter',
+      generalism == 'Specialists', 
+      density_dependence == 'Interspecific',
       n > 40,
       n < 50
    )
@@ -367,7 +422,7 @@ branch =
    inner_join(missing_species) |>
    mutate(richness = factor(n))
 
-plot_missing =
+figS6 =
    branch |> 
    group_by(scenario, seed) |> 
    summarize(
@@ -376,14 +431,21 @@ plot_missing =
       .groups = 'drop'
    ) |>
    inner_join(branch) |>
-   ggplot(aes(missing, func, color = missing50, shape = missing49)) +
+   mutate(
+      `Species 49` = c('Present', 'Absent')[1 + missing49],
+      `Species 50` = c('Present', 'Absent')[1 + missing50],
+      `Species richness` = n
+   ) |>
+   ggplot(aes(missing, func, fill = `Species 50`, shape = `Species 49`)) +
    geom_point() +
    labs(x = 'Missing species', y = 'Function') +
-   facet_wrap(~n, labeller = label_both)
+   facet_wrap(~`Species richness`, labeller = label_both) +
+   scale_shape_manual(values = c(22, 24)) +
+   guides(fill = guide_legend(override.aes = list(color = c('#F8766D', '#619CFF'))))
 
 
 ## Fig5 -------------------------------------------------------------------
-## Calculate importance of each dimension of variation
+## Calculate importance of each dimension of variation - NOT CURRENTLY USED IN MANUSCRIPT
 
 BEF_sign = 
    total_function_summary |>
