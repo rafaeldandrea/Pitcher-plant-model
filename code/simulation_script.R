@@ -6,7 +6,6 @@ library(gtools) ## for sampling
 
 ## fixed parameters
 totalspecies = 50
-
 fixed_parameters = 
    list(
       p0 = .7,
@@ -20,7 +19,8 @@ fixed_parameters =
       mu0 = .01,
       rho0 = 2,
       hmin = log(1),
-      hmax = log(8)   
+      hmax = log(8),
+      num_replicates = 50
    ) 
 
 list2env(fixed_parameters, envir = .GlobalEnv)
@@ -29,15 +29,16 @@ list2env(fixed_parameters, envir = .GlobalEnv)
 source('project_functions.R')
 
 ## set number of workers for parallel processing
-plan(multisession, workers = 120) 
+# plan(multisession, workers = 120) 
+plan(cluster, workers = 200)
 
-dir_path = 
-   paste0(
-      '/gpfs/home/rdrocha/BEF/data/', 
-      Sys.Date()
-   )
-dir.create(dir_path, showWarnings = FALSE)
+## read batch array index (separates scenario simulations into chunks run by different nodes)
+array_id = 
+  'SLURM_ARRAY_TASK_ID' |> 
+  Sys.getenv() |> 
+  as.numeric()
 
+## parameter scenarios
 scenarios = 
    expand_grid(
       n = c(seq(1, 17, 2), seq(19, 49, 5), 50),
@@ -54,11 +55,37 @@ scenarios =
       maxtime = 1000
    ) |>
    rowid_to_column(var = 'scenario') |>
-   expand_grid(seed = 1:50)
+   expand_grid(seed = 1:num_replicates)
 
+## chunk scenarios based on array_id
+chunks = 
+  tibble(
+    minscen = seq(1, max(scenarios$scenario), by = round(1e3 / num_replicates)),
+    maxscen = minscen + round(1e3 / num_replicates) - 1,
+    datadir = 1e3 * (minscen %/% 1e3)
+  )
 
+minscen = chunks$minscen[array_id]
+maxscen = chunks$maxscen[array_id]
+datadir = chunks$datadir[array_id]
+
+## directory to save files
+dir_path = 
+  paste0(
+    '/gpfs/projects/DAndreaGroup/BEF/data/', 
+    Sys.Date(),
+    '_scenarios_',
+    datadir,
+    '_to_',
+    datadir + 999
+  )
+
+dir.create(dir_path, showWarnings = FALSE)
+
+## run simulation and save results to dir_path
 results =
    scenarios |>
+   filter(scenario %in% minscen:maxscen) |>
    future_pmap_dfr(
       simulation,
       full.data = TRUE,
