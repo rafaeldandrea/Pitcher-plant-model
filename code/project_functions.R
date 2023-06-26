@@ -1,5 +1,4 @@
-## Model functions
-
+## Dynamic model
 pitcher = 
    function(
       t, 
@@ -11,19 +10,15 @@ pitcher =
       
       alpha = parms$alpha
       mu = parms$mu
-      rho = parms$rho
       
       beta = parms$beta
       h = parms$h
-      lambda_max = parms$lambda
-      q_intra = parms$q_intra
-      q_inter = parms$q_inter
-      gamma = parms$gamma
+      c = parms$c
       p = parms$p
       
+      q_intra = parms$q_intra
+      q_inter = parms$q_inter
       qik = diag(nN) * q_intra + (1 - diag(nN)) * q_inter
-      
-      c = gamma
       
       time = y[1]
       R = y[3:(nR + 2)]
@@ -33,7 +28,12 @@ pitcher =
       N[N < 0] = 0
       N[alpha == 0] = 0
       
-      lambda = lambda_max * as.numeric(exp(-qik %*% N))
+      rho0 = parms$rho0
+      tau = parms$tau
+      rho = rho0 * exp(-time/tau)
+      
+      lambda_0 = parms$lambda_0
+      lambda = lambda_0 * as.numeric(exp(-qik %*% N))
       
       Upsilon = t(t(beta) * R / (1 + t(h * beta) * R))
       Gamma = Upsilon %*% (c * (1 - rowSums(p)))
@@ -43,210 +43,176 @@ pitcher =
       dfdt = rowSums(lambda * Upsilon * N)
       dFdt = sum(dfdt)
       dNdt = alpha + Gamma * N - mu * N
-      dRdt = rho * exp(-time) + colSums(Omega * N) - colSums(Upsilon * N)
+      dRdt = rho + colSums(Omega * N) - colSums(Upsilon * N)
    
    return(list(c(dtimedt, dFdt, dRdt, dNdt, dfdt)))
 }
 
+
+## Define parameters based on simulation scenario
 parameters = 
    function(
       n,
-      sampling,
-      resource_supply,
-      ammonia,
-      density_dependence,
-      production,
-      recalcitrance,
+      niches,
+      coregulation,
+      byproduction,
       handling_time,
-      generalism,
-      uptake_factor,
-      efficiency,
-      seed,
-      maxtime
+      quality,
+      ammonia_capacity,
+      seed
    ){
       
-      nN = nR = chain_length
+      nN = num_species
+      nR = num_resources
       
-      if(production == 'serial'){
-         p = matrix(0, nN, nR)
-         for(i in seq(nN)) for(j in seq(nR)) if(j == (i + 1)) p[i, j] = p0
-      } else if(production == 'parallel'){
-         p = upper.tri(matrix(0, nN, nR))
-         p = p0 * p / (1e-16 + rowSums(p))
-      } else if(production == 'off'){
-         p = matrix(0, nN, nR)
-      }
-      
-      if(generalism == 'hierarchy'){
-         beta = outer(seq(nN), seq(nR), function(i, j) exp(-abs(i - j)))
-         beta = beta0 * (diag(nR) + beta * lower.tri(beta)) / rowSums(beta) * seq(nN) / nN
-      } else if(generalism == 'random'){
-         set.seed(seed)
-         beta = beta0 * matrix(runif(nR * nN), nN, nR)
-      } else if(generalism == 'gencomp'){
-         v = exp(- .1 * seq(nN))
-         v = v / mean(v) * beta0
-         beta = v * outer(seq(nR), seq(nN), \(i, j) i >= j)
-      } else if(generalism == 'generalists'){
-         d = outer(seq(nN), seq(nR), \(i, j) i - j)
-         v = exp(.1 * seq(nN))
-         v = v / mean(v) * beta0 
-         beta = v * exp(-(d / 2) ^ 2) / sum(exp(-(d / 2) ^ 2))
-      } else if(generalism == 'specialists'){
-         beta = nR * beta0 * diag(nR)
-      } else if(generalism == 'tradeoff'){
-         theta_ji = diag(nR) + upper.tri(matrix(NA, nR, nR))
-         beta = beta0 * uptake_factor ^ seq(0, nR - 1) * nR / (nR - seq(0, nR - 1)) * theta_ji
-      } else if(generalism == 'tradeoff_additive'){
-         theta_ji = diag(nR) + upper.tri(matrix(NA, nR, nR))
-         beta = (uptake_factor * seq(0, nR - 1) + nR * beta0) / (nR - seq(0, nR - 1)) * theta_ji
-      }
-      
-      if(ammonia == 'flat'){
-         lambda = matrix(mean(c(lambda_min, lambda_max)), nrow = nN, ncol = nR, byrow = recalcitrance)
-      } else if(ammonia == 'increase'){
-         lambda = matrix(seq(lambda_min, lambda_max, length = nN), nrow = nN, ncol = nR, byrow = recalcitrance)
-      } else if(ammonia == 'decrease'){
-         lambda = matrix(seq(lambda_max, lambda_min, length = nN), nrow = nN, ncol = nR, byrow = recalcitrance)
-      } else if(ammonia == 'exponential'){
-         lambda = matrix(exp(seq(log(lambda_max), log(lambda_min), length = nN)), nrow = nN, ncol = nR, byrow = recalcitrance)
-      } 
-      
-      if(density_dependence == 'none'){
-         q_intra = q_inter = 0
-      } else if(density_dependence == 'neutral'){
-         q_intra = q_inter = .1
-      } else if(density_dependence == 'intra'){
-         q_intra = .1
-         q_inter = .05
-      } else if(density_dependence == 'inter'){
-         q_intra = .05
-         q_inter = .1
-      }
-      
-      if(efficiency == 'flat'){
-         gamma = rep(gamma_min, length = nR)
-      } else if(efficiency == 'increase'){
-         gamma = exp(seq(0, 5, length = nR))
-         gmax = gamma_max
-         gmin = gamma_min
-         slope = (gmax - gmin) / (max(gamma) - min(gamma))
-         gamma = gmax - slope * max(gamma) + slope * gamma
-      } 
-      
-      alpha = rep(0, chain_length)
-      if(n == chain_length){
-         consumer_index = seq(chain_length)
-      }else if(n == (chain_length - 1)){
-         consumer_index = seq(chain_length)[-seed]
-      } else if(n > 1 & sampling == 'random'){
-         set.seed(seed)
-         consumer_index = sort(sample(chain_length, size = n))
-      } else if(n > 1 & sampling == 'ordered'){
-         consumer_index = seq(n)
+      ## Immigration rates
+      alpha = rep(0, num_species)
+      if(n == num_species){
+        consumer_index = seq(num_species)
+      } else if(n == (num_species - 1)){
+        consumer_index = seq(num_species)[-seed]
       } else if(n == 1){
-         consumer_index = seed
-      }
+        consumer_index = seed
+      } else if(n > 1){
+        set.seed(seed)
+        consumer_index = sort(sample(num_species, size = n))
+      } 
       alpha[consumer_index] = alpha0
       
-      if(resource_supply == 'ordered'){
-         rho = c(rho0, rep(0, nR - 1))
-      } else if(resource_supply == 'uniform'){
-         rho = rep(rho0, nR)
+      ## Niche scenario
+      if(niches == 'Generalists'){
+        set.seed(seed)
+        beta = beta_max * matrix(runif(nR * nN), nN, nR)
+      } else if(niches == 'Specialists'){
+        beta = nR * beta_max * diag(nR)
+      } else if(niches == 'Gradient'){
+        theta_ji = diag(nR) + upper.tri(matrix(NA, nR, nR))
+        beta = beta_max * nR / (nR - seq(0, nR - 1)) * theta_ji
       }
       
-      if(handling_time == 'decrease'){
-         h = exp(seq(hmax, hmin, length = totalspecies))
-      } else if(handling_time == 'increase'){
-         h = exp(seq(hmin, hmax, length = totalspecies))
-      } else if(handling_time == 'flat'){
-         h = mean(exp(c(hmax, hmin)))
+      ## Co-regulation scenario
+      if(coregulation == 'Absent'){
+        q_intra = q_inter = 0
+      } else if(coregulation == 'Neutral'){
+        q_intra = q_inter = qmax
+      } else if(coregulation == 'Intraspecific'){
+        q_intra = qmax
+        q_inter = qmin
+      } else if(coregulation == 'Interspecific'){
+        q_intra = qmin
+        q_inter = qmax
+      }
+      
+      ## By-production architecture
+      if(byproduction == 'Serial'){
+         p = matrix(0, nN, nR)
+         for(i in seq(nN)) 
+           for(j in seq(nR)) 
+             if(j == (i + 1)) p[i, j] = p0
+      } else if(byproduction == 'Nested'){
+         p = upper.tri(matrix(0, nN, nR))
+         p = p0 * p / (1e-16 + rowSums(p))
+      } else if(byproduction == 'None'){
+         p = matrix(0, nN, nR)
+      }
+      
+      ## Resource quality scenario
+      if(quality == 'Flat'){
+         c = rep(c_min, length = nR)
+      } else if(quality == 'Increase'){
+         c = exp(seq(0, 5, length = nR))
+         slope = (c_max - c_min) / (max(c) - min(c))
+         c = c_max - slope * max(c) + slope * c
+      } 
+      
+      ## Handling time scenarios
+      if(handling_time == 'Decrease'){
+         h = exp(seq(logh_max, logh_min, length = nN))
+      } else if(handling_time == 'Increase'){
+         h = exp(seq(logh_min, logh_max, length = nN))
+      } else if(handling_time == 'Flat'){
+         h = mean(exp(c(logh_max, logh_min)))
+      }
+      
+      ## Ammonia capacity down the species chain
+      if(ammonia_capacity == 'Flat'){
+        lambda_0 = rep(mean(c(lambda_min, lambda_max)), nN)
+      } else if(ammonia_capacity == 'Increase'){
+        lambda_0 = seq(lambda_min, lambda_max, length = nN)
+      } else if(ammonia_capacity == 'Decrease'){
+        lambda_0 = seq(lambda_max, lambda_min, length = nN)
       }
       
       params = 
          list(
             nN = nN,
             nR = nR,
-            sampling = sampling,
             alpha = alpha,
             beta = beta,
-            mu = rep(mu0, nN),
-            rho = rho,
-            lambda = lambda,
+            mu = mu,
+            rho0 = rho0,
+            tau = tau,
+            lambda_0 = lambda_0,
             q_intra = q_intra,
             q_inter = q_inter,
-            gamma = gamma,
+            c = c,
             h = h,
             p = p,
-            maxtime = maxtime,
             seed = seed,
-            consumer_index = consumer_index,
-            resource_supply = resource_supply
+            consumer_index = consumer_index
          )
       
       return(params)
    }
 
 
+## Run simulation
 simulation = 
    function(
       scenario,
       n,
-      sampling,
-      resource_supply,
-      ammonia,
-      density_dependence,
-      production,
-      recalcitrance,
+      niches,
+      coregulation,
+      byproduction,
       handling_time,
-      generalism,
-      uptake_factor,
-      efficiency,
+      quality,
+      ammonia_capacity,
       seed,
-      mintime = 1,
-      maxtime,
+      t_min = 1,
+      t_max = 1000,
       timeseq_length = 1e3,
       full.data = TRUE,
       save.file = FALSE,
-      path = NULL,
-      model = 'pitcher',
-      keep.unsampled.species = FALSE
+      path = NULL
    ){
       
       params = 
          parameters(
-            n,
-            sampling,
-            resource_supply,
-            ammonia,
-            density_dependence,
-            production,
-            recalcitrance,
-            handling_time,
-            generalism,
-            uptake_factor,
-            efficiency,
-            seed,
-            maxtime
+            n = n,
+            niches = niches,
+            coregulation = coregulation,
+            byproduction = byproduction,
+            handling_time = handling_time,
+            quality = quality,
+            ammonia_capacity = ammonia_capacity,
+            seed = seed
          )
       
       nR = params$nR
       nN = params$nN
       R0 = rep(0, nR)
       N0 = rep(0, nN)
-      abun = c(mintime, 0, R0, N0, rep(0, nN))
+      abun = c(t_min, 0, R0, N0, rep(0, nN))
       
-      time_sequence = round(seq(mintime, maxtime, length = timeseq_length))
+      time_sequence = round(seq(t_min, t_max, length = timeseq_length))
       
-      if(model == 'pitcher'){
-         sim = 
-            ode(
-               y = abun, 
-               times = time_sequence, 
-               func = pitcher, 
-               parms = params
-            )
-      }
+      sim = 
+        ode(
+          y = abun, 
+          times = time_sequence, 
+          func = pitcher, 
+          parms = params
+        )
       
       data_wide = 
          data.frame(sim) |>
@@ -264,20 +230,15 @@ simulation =
       
       parms_tbl = 
          tibble(
-            scenario,
-            n,
-            sampling,
-            resource_supply,
-            ammonia,
-            density_dependence,
-            production,
-            recalcitrance,
-            handling_time,
-            generalism,
-            uptake_factor,
-            efficiency,
-            seed,
-            maxtime
+            scenario = scenario,
+            n = n,
+            niches = niches,
+            coregulation = coregulation,
+            byproduction = byproduction,
+            handling_time = handling_time,
+            quality = quality,
+            ammonia_capacity = ammonia_capacity,
+            seed = seed
          ) 
       
       data = 
@@ -285,21 +246,17 @@ simulation =
          bind_cols(
             data_wide |>
                pivot_longer(-time, names_to = 'species')
-         ) 
-      
-      if(!keep.unsampled.species){
-         data =
-            data |>
-            filter(
-               species %in% 
-                  c(
-                     'function', 
-                     paste0('R', seq(nR)), 
-                     paste0('N', params$consumer_index),
-                     paste0('F', params$consumer_index)
-                  )
+         ) |>
+        filter(
+          species %in% 
+            c(
+              'function', 
+              paste0('R', seq(nR)), 
+              paste0('N', params$consumer_index),
+              paste0('F', params$consumer_index)
             )
-      }
+        )
+      
       
       if(save.file){
          save_name = 
@@ -326,4 +283,3 @@ simulation =
             )
       }
    }
-
