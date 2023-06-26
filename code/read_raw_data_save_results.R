@@ -4,22 +4,27 @@ library(furrr)
 
 plan(multisession, workers = 30)
 
+dir_date = '2023-06-16'
+dir_path = 
+  paste0(
+    '/gpfs/projects/DAndreaGroup/BEF/data/', 
+    dir_date
+  )
+
 data_folders = 
-  c(
-    '2023-05-29_scenarios_0_to_999',
-    '2023-05-29_scenarios_1000_to_1999',
-    '2023-05-29_scenarios_2000_to_2999',
-    '2023-05-29_scenarios_3000_to_3999'
+  paste0(
+    dir_path,
+    c(
+      '_scenarios_0_to_999',
+      '_scenarios_1000_to_1999',
+      '_scenarios_2000_to_2999',
+      '_scenarios_3000_to_3999'
+    )
   )
 
 for(folder in data_folders){
-  dir_path = 
-    paste0(
-      '/gpfs/projects/DAndreaGroup/BEF/data/', 
-      folder
-    )
   
-  filenames = list.files(dir_path, pattern = '*.rds', full.names = TRUE)
+  filenames = list.files(folder, pattern = '*.rds', full.names = TRUE)
   
   results = 
     filenames |>
@@ -34,56 +39,36 @@ for(folder in data_folders){
           return(bar)
         } else return()
       } 
-    ) |>
-    mutate(
-      density_dependence = 
-        fct_recode(
-          density_dependence, 
-          !!!c(
-            Interspecific = 'inter', 
-            Intraspecific = 'intra', 
-            Neutral = 'neutral', 
-            None = 'none'
-          )
-        ),
-      generalism = 
-        fct_recode(
-          generalism,
-          !!!c(
-            Generalists = 'random',
-            Specialists = 'specialists',
-            Gradient = 'tradeoff'
-          )
-        )
     )
   
-  saveRDS(results, paste0('results_', folder,'.rds'))
+  saveRDS(results, paste0(folder,'_results.rds'))
   
 }
 
-setwd('/gpfs/projects/DAndreaGroup/BEF/data/')
 results = NULL
 for(folder in data_folders){
   results =
     results |>
     bind_rows(
-      readRDS(paste0('results_', folder, '.rds'))
+      readRDS(paste0(folder,'_results.rds'))
     )
 }
 
+saveRDS(results, paste0(dir_path, '_results.rds'))
+
 results_gradient = 
   results |> 
-  filter(generalism == 'tradeoff')
+  filter(niches == 'Gradient')
 
 results_specialists = 
   results |> 
-  filter(generalism == 'specialists')
+  filter(niches == 'Specialists')
 
 results_generalists = 
   results |> 
-  filter(generalism == 'random')
+  filter(niches == 'Generalists')
 
-saveRDS(results, 'results_2023-05-29.rds')
-saveRDS(results_generalists, 'results_generalists.rds')
-saveRDS(results_specialists, 'results_specialists.rds')
-saveRDS(results_gradient, 'results_gradient.rds')
+
+saveRDS(results_generalists, paste0(dir_path, '_results_generalists.rds'))
+saveRDS(results_specialists, paste0(dir_path, '_results_specialists.rds'))
+saveRDS(results_gradient,    paste0(dir_path, '_results_gradient.rds'))
