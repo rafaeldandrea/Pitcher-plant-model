@@ -56,45 +56,45 @@ Diversity =
 df = 
   expand_grid(
     n = c(seq(1, 17, 2), seq(19, 49, 5), 50),
-    sampling = 'random',
-    resource_supply = 'uniform',
-    ammonia = 'decrease',
-    density_dependence = c('none', 'neutral', 'intra', 'inter'),
-    production = c('serial', 'parallel', 'off'),
-    recalcitrance = TRUE,
-    handling_time = c('decrease', 'flat', 'increase'),
-    generalism = c('random', 'tradeoff', 'specialists'),
-    uptake_factor = 1,
-    efficiency = c('flat', 'increase'),
-    maxtime = 1000
+    ammonia_capacity = 'Decrease',
+    coregulation = c('Absent', 'Neutral', 'Intraspecific', 'Interspecific'),
+    byproduction = c('Serial', 'Nested', 'None'),
+    handling_time = c('Decrease', 'Flat', 'Increase'),
+    niches = c('Generalists', 'Gradient', 'Specialists'),
+    quality = c('Flat', 'Increase')
   ) |>
   rowid_to_column(var = 'scenario') |>
-  expand_grid(seed = 1:50) |> 
-  filter(density_dependence == 'none') |>
+  expand_grid(seed = 1:50) |>
+  filter(coregulation == 'Absent') |>
   mutate(filename = paste0('scenario-', scenario, '_seed-', seed, '.rds'))
 
+date = '2023-06-16'
 dir = '/gpfs/projects/DAndreaGroup/BEF/data/'
 folders = 
-  c(
-    '2023-05-29_scenarios_0001_to_0999/',
-    '2023-05-29_scenarios_1000_to_1999/',
-    '2023-05-29_scenarios_2000_to_2999/',
-    '2023-05-29_scenarios_3000_to_3999/'
+  paste0(
+    dir, 
+    date,
+    c(
+      '_scenarios_0001_to_0999/',
+      '_scenarios_1000_to_1999/',
+      '_scenarios_2000_to_2999/',
+      '_scenarios_3000_to_3999/'
+    )
   )
 
 processed_data =
   folders |>
   map_dfr(
     .f = \(folder){
-      list.files(paste0(dir, folder)) |>
+      list.files(folder) |>
         intersect(df$filename) |>
         future_map_dfr(
           .f = \(file){
-            readRDS(paste0(dir, folder, file)) |>
+            readRDS(paste0(folder, file)) |>
               Diversity()
           }
         )
     }
   )
 
-saveRDS(processed_data, paste0(dir, 'results_figS1.rds'))
+saveRDS(processed_data, paste0(dir, date, '_results_figS1.rds'))
