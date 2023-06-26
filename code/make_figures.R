@@ -33,8 +33,8 @@ results_figS1 =
   url() |>
   readRDS()
 
-results_figS6 = 
-  'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS6.rds' |>
+results_figS5 = 
+  'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS5.rds' |>
   url() |>
   readRDS()
 
