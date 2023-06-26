@@ -4,32 +4,28 @@ library(furrr)
 
 plan(multisession, workers = 120)
 
+date = '2023-06-16'
 dir = '/gpfs/projects/DAndreaGroup/BEF/data/'
-folder = '2023-05-29_scenarios_3000_to_3999/'
+folder = '_scenarios_3000_to_3999/'
 
 df = 
   expand_grid(
     n = c(seq(1, 17, 2), seq(19, 49, 5), 50),
-    sampling = 'random',
-    resource_supply = 'uniform',
-    ammonia = 'decrease',
-    density_dependence = c('none', 'neutral', 'intra', 'inter'),
-    production = c('serial', 'parallel', 'off'),
-    recalcitrance = TRUE,
-    handling_time = c('decrease', 'flat', 'increase'),
-    generalism = c('random', 'tradeoff', 'specialists'),
-    uptake_factor = 1,
-    efficiency = c('flat', 'increase'),
-    maxtime = 1000
+    ammonia_capacity = 'Decrease',
+    coregulation = c('Absent', 'Neutral', 'Intraspecific', 'Interspecific'),
+    byproduction = c('Serial', 'Nested', 'None'),
+    handling_time = c('Decrease', 'Flat', 'Increase'),
+    niches = c('Generalists', 'Gradient', 'Specialists'),
+    quality = c('Flat', 'Increase')
   ) |>
   rowid_to_column(var = 'scenario') |>
   expand_grid(seed = 1:50) |> 
   filter(
-    production == 'parallel',
-    handling_time == 'flat',
-    efficiency == 'increase',
-    generalism == 'specialists', 
-    density_dependence == 'inter',
+    niches == 'Specialists', 
+    coregulation == 'Interspecific',
+    byproduction == 'Nested',
+    handling_time == 'Flat',
+    quality == 'Increase',
     n > 40,
     n < 50
   ) |>
@@ -40,8 +36,7 @@ processed_data =
   future_pmap_dfr(
     .f = \(scenario, n, seed, filename, ...){
       foo =  
-        missing_species =
-        readRDS(paste0(dir, folder, filename)) |>
+        readRDS(paste0(dir, date, folder, filename)) |>
         slice_max(time)  
       
       dtf = 
@@ -72,4 +67,4 @@ processed_data =
   ) |>
   inner_join(df)
   
-saveRDS(processed_data, paste0(dir, 'results_figS6.rds'))
+saveRDS(processed_data, paste0(dir, date, '_results_figS5.rds'))
