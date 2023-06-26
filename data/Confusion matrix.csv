@@ -1,0 +1,6 @@
+,,Observed BEF shape,,,,
+,,Negative,Null,Positive,Modal,Classification Error
+Predicted BEF shape,Negative,43,0,1,0,0.0233
+,Null,0,18,0,2,0.1
+,Positive,0,0,98,5,0.0485
+,Modal,0,1,5,44,0.12
