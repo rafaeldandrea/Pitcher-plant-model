@@ -32,7 +32,8 @@ results_gradient =
 
 results_fig5 =
   "https://raw.githubusercontent.com/rafaeldandrea/Pitcher-plant-model/main/data/BEF_shape_table.csv" |>
-  read.csv()
+  read.csv() |>
+as_tibble()
 
 results_figS1 = 
   'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS1.rds' |>
