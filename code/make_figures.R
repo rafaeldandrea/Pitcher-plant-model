@@ -1,7 +1,10 @@
 ## Call required libraries ------------------------------
-library(tidyverse) ## for tidy data wrangling and piping
+library(tidyverse) ## for tidy data wrangling
 library(ggh4x) ## for function facet_grid2()
 library(kader) ## for function cuberoot()
+library(randomForest) ## for random forest analysis in Fig. 5
+library(randomForestSRC) ## for random forest analysis in Fig. 5
+
 
 ## Update plot settings ------------------
 theme_set(theme_bw())
@@ -12,7 +15,6 @@ theme_update(
 )
 
 ## Read data from GitHub ---------------------
-
 results_generalists = 
   'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_generalists.rds' |>
   url() |>
@@ -28,6 +30,10 @@ results_gradient =
   url() |>
   readRDS()
 
+results_fig5 =
+  "https://raw.githubusercontent.com/rafaeldandrea/Pitcher-plant-model/main/data/BEF_shape_table.csv" |>
+  read.csv()
+
 results_figS1 = 
   'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS1.rds' |>
   url() |>
@@ -37,7 +43,6 @@ results_figS5 =
   'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS5.rds' |>
   url() |>
   readRDS()
-
 
 
 ## Merge niche scenario datasets and change value names of simulation scenarios -----------
@@ -77,7 +82,6 @@ results =
         )
       )
   )
-    
 
 ## Define default resource quality scenario -------------------
 maintext_resource_quality = 'Flat'
@@ -257,7 +261,93 @@ fig4 =
 
 ## Fig 5 -------------------------------------------------------------------
 ## Calculate importance of each dimension of variation 
-## SEPARATE CODE
+results_fig5$BEF_shape =
+  as.factor(
+    recode(
+      results_fig5$BEF_shape,
+      "-" = "Negative",
+      "+" = "Positive",
+      "+-" = "Unimodal",
+      "0" = "Null"
+    )
+  )
+
+#Transforming characters into factors
+results_fig5[sapply(results_fig5, is.character)] =
+  lapply(
+    results_fig5[sapply(results_fig5, is.character)],
+    as.factor
+  )
+
+# Just checking the optimal number of splitting variables before running the final model
+oob.values = vector()
+for (i in 1:5) {
+  RF.model = 
+    randomForest(
+      BEF_shape ~ .,
+      data = results_fig5,
+      ntree = 1000,
+      mtry = i
+    )
+  oob.values[i] = RF.model$err.rate[500, 1]
+}
+
+oob.values# 3 splitting variables per tree seems to be a good balance between parsimony and predictive power
+
+#Running the final model
+set.seed(123)
+Final_RF_model =
+  rfsrc(
+    BEF_shape ~ .,
+    data = results_fig5,
+    ntree = 1000,
+    mtry = 3,
+    importance = "permute"
+  )
+
+#(OOB) Misclassification  calculated as sum of off-diagonal elements of the confusion matrix 
+# divided by total sample size
+Final_RF_model$err.rate[1000] # 6.5%
+
+#Bootstraping Variable importance estimates.
+Subsample_importance = subsample(Final_RF_model, B = 1000)
+
+
+#Working the data to generate figure 5
+Data_plot  =
+  Subsample_importance |>
+  extract.subsample(raw = TRUE) |>
+  pluck('vmpS') |>
+  t() |>
+  as_tibble() |>
+  rename(
+    `Co-regulation` = Coregulation,
+    `Niche scenario` = Niches,
+    `Handling time` = Handling_time,
+    `Resource quality` = Resource_quality,
+    `By-production` = Byproduction
+  ) |>
+  rownames_to_column() |>
+  pivot_longer(-rowname, names_to = 'variable', values_to = 'importance') |>
+  select(-rowname)
+
+fig5 = 
+  Data_plot |>
+  ggplot(aes(x = importance, y = fct_reorder(variable, importance))) +
+  geom_violin(
+    trim = FALSE,
+    fill = "dodgerblue3",
+    scale = "width",
+  ) +
+  geom_boxplot(
+    width = 0.1,
+    outlier.alpha = 0,
+    fill = "white",
+  ) +
+  xlab("Variable importance") +
+  ylab("")
+
+
 
 ## Fig S1 -----------------------------------
 ## Observed versus seeded richness
@@ -482,3 +572,4 @@ BEF_shape_table =
     Resource_quality,
     Byproduction
   )
+
