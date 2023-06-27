@@ -481,31 +481,6 @@ figS4 = cowplot::plot_grid(
   rel_widths = c(1, 1, .3)
 )
 
-figS7 = 
-  comp_sel |>
-  filter(quality == si_resource_quality) |>
-  group_by(across(niches:ammonia_capacity)) |>
-  arrange(n) |>
-  mutate(
-    cdiff = c(NA, diff(compl.m)),
-    sdiff = c(NA, diff(selec.m))
-  ) |>
-  ungroup() |>
-  mutate(
-    bef = cdiff + sdiff,
-    dominant = ifelse(abs(cdiff) > abs(sdiff), 'C', 'S')
-  ) |>
-  filter(
-    n > 3,
-    n < 50,
-    bef < 0,
-    sign(cdiff) != sign(sdiff)
-  ) |>
-  ggplot(aes(n, bef, color = handling_time, linetype = byproduction)) +
-  geom_line() +
-  ggh4x::facet_grid2(coregulation ~ niches, scales = 'free_y', independent = 'y')
-  
-
 ## Fig S5 -------------------------------------------------------------------
 ## Investigate the bifurcation in the Specialists scenario
 figS5 =
@@ -573,4 +548,3 @@ BEF_shape_table =
     Resource_quality,
     Byproduction
   )
-
