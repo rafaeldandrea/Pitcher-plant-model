@@ -54,7 +54,7 @@ Platform: x86_64-w64-mingw32/x64 (64-bit)
 
 Attached base packages: 
 
-stats, graphics,  grDevices utils, datasets,  methods,   base     
+parallel    stats       graphics    grDevices utils       datasets    methods     base    
 
 
 Other attached packages: 
