@@ -1,7 +1,7 @@
 ## Call required libraries ------------------------------
 library(tidyverse) ## for tidy data wrangling
 library(ggh4x) ## for function facet_grid2()
-library(kader) ## for function cuberoot()
+library(scales) ## for function trans_new()
 library(randomForest) ## for random forest analysis in Fig. 5
 library(randomForestSRC) ## for random forest analysis in Fig. 5
 
@@ -30,10 +30,15 @@ results_gradient =
   url() |>
   readRDS()
 
-results_fig5 =
-  "https://raw.githubusercontent.com/rafaeldandrea/Pitcher-plant-model/main/data/2023-06-16_BEF_shape_table.csv" |>
+results_fig1 = 
+  'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/Microcosm_richness_enzyme_activity.csv' |>
   read.csv() |>
   as_tibble()
+
+results_fig6 =
+  "https://raw.githubusercontent.com/rafaeldandrea/Pitcher-plant-model/main/data/2023-06-16_BEF_shape_table.csv" |>
+  read.csv() |>
+  as.data.frame()
 
 results_figS1 = 
   'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS1.rds' |>
@@ -44,7 +49,6 @@ results_figS5 =
   'https://github.com/rafaeldandrea/Pitcher-plant-model/raw/main/data/2023-06-16_results_figS5.rds' |>
   url() |>
   readRDS()
-
 
 ## Merge niche scenario datasets and change value names of simulation scenarios -----------
 results =
@@ -107,21 +111,37 @@ total_function_summary =
    )
 
 ## Fig 1 -------------------
+## Negative BEF relationship in a pitcher plant.
+fig1 = 
+  results_fig1 |>
+  ggplot(aes(x = Mean_exp.H., y = N.acetylglucosaminidase.mean)) +
+  geom_point() + 
+  geom_smooth(method = "lm", color="black") +
+  theme(legend.position = "none") +
+  labs(
+    x = "Effective number of species", 
+    y = "Enzyme production (mean 1,2-N-acetylglucosaminidase)"
+  )
+
+REAlm = lm(Mean_exp.H. ~ N.acetylglucosaminidase.mean, data = results_fig1)
+summary(REAlm)
+
+## Fig 2 -------------------
 ## Schematic representation of model. No code.
 
-## Fig 2 -------------------------------------------------------------------
+## Fig 3 -------------------------------------------------------------------
 ## Plot BEF for scenarios with increasing resource quality, flat handling time, and nested by-production
 ## include data points for all replicates
 
-f2_scenario =
+fig3_scenario =
   tibble(
     handling_time = 'Flat',
     byproduction = 'Nested'
   )
 
-fig2a = 
+fig3a = 
    total_function |>
-   inner_join(f2_scenario)|>
+   inner_join(fig3_scenario)|>
    filter(quality == 'Flat') |>
    ggplot(aes(n, func)) +
    geom_point(color = 'grey90') +
@@ -129,16 +149,16 @@ fig2a =
       aes(n, func), 
       data = 
          total_function_summary |>
-         inner_join(f2_scenario) |>
+         inner_join(fig3_scenario) |>
          filter(quality == 'Flat')
    ) +
    theme(legend.position = 'none') +
    ggh4x::facet_grid2(coregulation ~ niches, scales = 'free_y', independent = 'y') +
    labs(x = 'Seeded richness', y = 'Total ammonia production')
 
-fig2b = 
+fig3b = 
   total_function |>
-  inner_join(f2_scenario)|>
+  inner_join(fig3_scenario)|>
   filter(quality == 'Increase') |>
   ggplot(aes(n, func)) +
   geom_point(color = 'grey90') +
@@ -146,18 +166,18 @@ fig2b =
     aes(n, func), 
     data = 
       total_function_summary |>
-      inner_join(f2_scenario) |>
+      inner_join(fig3_scenario) |>
       filter(quality == 'Increase')
   ) +
   theme(legend.position = 'none') +
   ggh4x::facet_grid2(coregulation ~ niches, scales = 'free_y', independent = 'y') +
   labs(x = 'Seeded richness', y = 'Total ammonia production')
 
-fig2 = cowplot::plot_grid(fig2a, fig2b, nrow = 1, labels = 'auto')
+fig3 = cowplot::plot_grid(fig3a, fig3b, nrow = 1, labels = 'auto')
 
-## Fig 3 -------------------------------------------------------------------
+## Fig 4 -------------------------------------------------------------------
 ## Plot BEF for all scenarios with increasing resource quality
-fig3 = 
+fig4 = 
   total_function_summary |>
   filter(quality == maintext_resource_quality) |>
   ggplot(aes(n, func, color = handling_time, linetype = byproduction)) +
@@ -170,7 +190,7 @@ fig3 =
     color = 'Handling\ntime'
   )
 
-## Fig 4 -------------------------------------------------------------------
+## Fig 5 -------------------------------------------------------------------
 ## Calculate complementarity and selection effects
 ## Reference: Loreau & Hector 2001 (Nature)
 Loreau = 
@@ -232,12 +252,20 @@ comp_sel_avg =
    )
 
 ## Compare scenarios based on complementarity and selection effects 
-fig4 = 
+trans_cube = 
+  trans_new(
+    name = "cube root",
+    transform = \(x) sign(x) * abs(x) ^ (1/3),
+    inverse = \(x) x ^ 3
+  )
+
+
+fig5 = 
   comp_sel_avg |>
   filter(quality == maintext_resource_quality) |>
   mutate(
-    C = kader:::cuberoot(compl.m),
-    S = kader:::cuberoot(selec.m)
+    C = compl.m / 10,
+    S = selec.m / 10
   ) |>
   ggplot(aes(C, S, fill = handling_time, shape = byproduction)) +
   geom_vline(xintercept = 0, color = 'grey') +
@@ -245,62 +273,52 @@ fig4 =
   geom_point() +
   facet_grid(coregulation ~ niches) +
   labs(
-    x = expression(Complementarity ^ frac(1, 3)), 
-    y = expression(Selection ^ frac(1, 3)), 
+    x = 'Complementarity (x 1/10)', 
+    y = 'Selection (x 1/10)', 
     fill = 'Handling\ntime', 
     shape = 'By-production\narchitecture'
   ) +
   scale_shape_manual(values = c(22, 21, 24)) +
-  guides(
-    fill = guide_legend(override.aes = list(color = c('#F8766D','#00BA38','#619CFF')))
+  guides(fill = guide_legend(override.aes = list(color = c('#F8766D','#00BA38','#619CFF')))) +
+  coord_trans(
+    x = trans_cube, 
+    y = trans_cube
   ) +
-  coord_cartesian(
-    xlim = c(-10, 10),
-    ylim = c(-10, 10)
-  )
+  scale_x_continuous(breaks = c(-40, -10, -1, 0, 1, 10, 40)) +
+  scale_y_continuous(breaks = c(-40, -10, -1, 0, 1, 10, 40))
 
-
-## Fig 5 -------------------------------------------------------------------
+## Fig 6 -------------------------------------------------------------------
 ## Calculate importance of each dimension of variation 
-results_fig5$BEF_shape =
-  as.factor(
-    recode(
-      results_fig5$BEF_shape,
-      "-" = "Negative",
-      "+" = "Positive",
-      "+-" = "Unimodal",
-      "0" = "Null"
-    )
-  )
 
-#Transforming characters into factors
-results_fig5[sapply(results_fig5, is.character)] =
-  lapply(
-    results_fig5[sapply(results_fig5, is.character)],
-    as.factor
-  )
+# Convert characters to factors
+data_fig6 = 
+  results_fig6 |>
+  mutate_if(is.character, as.factor)
 
 # Just checking the optimal number of splitting variables before running the final model
-oob.values = vector()
-for (i in 1:5) {
-  RF.model = 
-    randomForest(
-      BEF_shape ~ .,
-      data = results_fig5,
-      ntree = 1000,
-      mtry = i
-    )
-  oob.values[i] = RF.model$err.rate[500, 1]
-}
+oob.values = 
+  sapply(
+    1:5, 
+    \(i){
+      RF.model = 
+        randomForest(
+          BEF_shape ~ .,
+          data = data_fig6,
+          ntree = 1000,
+          mtry = i
+        )
+      return(RF.model$err.rate[500, 1])
+    }
+  )
 
-oob.values# 3 splitting variables per tree seems to be a good balance between parsimony and predictive power
+oob.values # 3 splitting variables per tree seems to be a good balance between parsimony and predictive power
 
 #Running the final model
 set.seed(123)
 Final_RF_model =
   rfsrc(
     BEF_shape ~ .,
-    data = results_fig5,
+    data = data_fig6,
     ntree = 1000,
     mtry = 3,
     importance = "permute"
@@ -332,7 +350,7 @@ Data_plot  =
   pivot_longer(-rowname, names_to = 'variable', values_to = 'importance') |>
   select(-rowname)
 
-fig5 = 
+fig6 = 
   Data_plot |>
   ggplot(aes(x = importance, y = fct_reorder(variable, importance))) +
   geom_violin(
@@ -395,8 +413,8 @@ figS3 =
   comp_sel_avg |>
   filter(quality == si_resource_quality) |>
   mutate(
-    C = kader:::cuberoot(compl.m),
-    S = kader:::cuberoot(selec.m)
+    C = compl.m / 10,
+    S = selec.m / 10
   ) |>
   ggplot(aes(C, S, fill = handling_time, shape = byproduction)) +
   geom_vline(xintercept = 0, color = 'grey') +
@@ -404,19 +422,19 @@ figS3 =
   geom_point() +
   facet_grid(coregulation ~ niches) +
   labs(
-    x = expression(Complementarity ^ frac(1, 3)), 
-    y = expression(Selection ^ frac(1, 3)), 
+    x = 'Complementarity (x 1/10)', 
+    y = 'Selection (x 1/10)', 
     fill = 'Handling\ntime', 
     shape = 'By-production\narchitecture'
   ) +
   scale_shape_manual(values = c(22, 21, 24, 25)) +
-  guides(
-    fill = guide_legend(override.aes = list(color = c('#F8766D','#00BA38','#619CFF')))
+  guides(fill = guide_legend(override.aes = list(color = c('#F8766D','#00BA38','#619CFF')))) +
+  coord_trans(
+    x = trans_cube, 
+    y = trans_cube
   ) +
-  coord_cartesian(
-    xlim = c(-10, 10),
-    ylim = c(-10, 10)
-  )
+  scale_x_continuous(breaks = c(-40, -10, -1, 0, 1, 10, 40)) +
+  scale_y_continuous(breaks = c(-40, -10, -1, 0, 1, 10, 40))
 
 
 
@@ -424,7 +442,7 @@ figS3 =
 ## Complementarity and Selection by richness
 figS4a = 
   comp_sel|>
-  inner_join(f2_scenario)|>
+  inner_join(fig3_scenario)|>
   filter(quality == 'Flat') |>
   mutate(
     Complementarity = compl.m,
@@ -448,7 +466,7 @@ figS4a =
  
 figS4b = 
   comp_sel|>
-  inner_join(f2_scenario)|>
+  inner_join(fig3_scenario)|>
   filter(quality == 'Increase') |>
   mutate(
     Complementarity = compl.m,
@@ -484,7 +502,7 @@ figS4 = cowplot::plot_grid(
 ## Fig S5 -------------------------------------------------------------------
 ## Investigate the bifurcation in the Specialists scenario
 figS5 =
-  results_figS6 |>
+  results_figS5 |>
   mutate(richness = factor(n)) |> 
   group_by(scenario, seed) |> 
   summarize(
@@ -493,7 +511,7 @@ figS5 =
     .groups = 'drop'
   ) |>
   inner_join(
-    results_figS6 |>
+    results_figS5 |>
       mutate(richness = factor(n)) |>
       select(scenario, n, seed, missing_species, func)
   ) |>
@@ -548,3 +566,4 @@ BEF_shape_table =
     Resource_quality,
     Byproduction
   )
+
