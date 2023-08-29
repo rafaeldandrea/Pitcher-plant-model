@@ -332,7 +332,7 @@ Final_RF_model$err.rate[1000] # 6.5%
 Subsample_importance = subsample(Final_RF_model, B = 1000)
 
 
-#Working the data to generate figure 5
+#Working the data to generate figure 6
 Data_plot  =
   Subsample_importance |>
   extract.subsample(raw = TRUE) |>
