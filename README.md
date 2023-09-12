@@ -42,10 +42,6 @@ Reads all needed data files from GitHub (see **Metadata**). Creates plots for al
 
 <br>
 
-**Note: Raw data files are stored in Zenodo, DOI XXX.**
-
-<br>
-
 **R Session Info**
 
 R version 4.3.1 (2023-06-16 ucrt)
