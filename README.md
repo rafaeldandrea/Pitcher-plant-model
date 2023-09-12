@@ -1,7 +1,7 @@
 # Pitcher-plant-model
 Files for pitcher plant BEF project
 
-Code files are used as follows.
+Code and data files are used as follows.
 
 **simulation_script.R**
 
