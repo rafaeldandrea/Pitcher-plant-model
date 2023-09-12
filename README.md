@@ -42,6 +42,12 @@ Reads all needed data files from GitHub (see **Metadata**). Creates plots for al
 
 <br>
 
+**Microcosm_richness_enzyme_activity.csv**
+
+Contains data plotted in Fig. 1.
+
+<br>
+
 **R Session Info**
 
 R version 4.3.1 (2023-06-16 ucrt)
